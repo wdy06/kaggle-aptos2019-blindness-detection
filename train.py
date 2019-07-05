@@ -20,6 +20,7 @@ from datetime import datetime
 import warnings
 from tqdm import tqdm
 
+from azureml.core import Workspace, Experiment
 
 
 import utils
@@ -35,20 +36,29 @@ args = parser.parse_args()
 def main():
     EPOCHS = 10
     BATCH_SIZE = 256
+    azure_run = None
+    experiment_name = datetime.strftime(datetime.now(), '%Y%m%d%H%M%S')
     
     if args.debug:
         print('running in debug mode')
         EPOCHS = 2
     if args.debug:
-        result_dir = os.path.join(utils.RESULT_DIR, 'debug-'+datetime.strftime(datetime.now(), '%Y%m%d%H%M%S'))
+        result_dir = os.path.join(utils.RESULT_DIR, 'debug-' + experiment_name)
     else:
-        result_dir = os.path.join(utils.RESULT_DIR, datetime.strftime(datetime.now(), '%Y%m%d%H%M%S'))
+        result_dir = os.path.join(utils.RESULT_DIR, experiment_name)
+        ws = Workspace.from_config('.aml_config/config.json')
+        exp = Experiment(workspace=ws, name='kaggle-aptos2019')
+        azure_run = exp.start_logging()
+        azure_run.log('experiment name', experiment_name)
+        azure_run.log('epoch', EPOCHS)
+        azure_run.log('batch size', BATCH_SIZE)
+        
     os.mkdir(result_dir)
     print(f'created: {result_dir}')
     
     device = torch.device("cuda:0")
     utils.run_model(epochs=EPOCHS, batch_size=BATCH_SIZE, device=device, 
-                    result_dir=result_dir, debug=args.debug)
+                    result_dir=result_dir, debug=args.debug, azure_run=azure_run)
 
     model = utils.load_pytorch_model('resnet34', os.path.join(result_dir, 'best_model'))
 
@@ -62,6 +72,8 @@ def main():
     submission_csv['diagnosis'] = np.argmax(test_preds, axis=1)
     submission_csv.to_csv(os.path.join(result_dir, 'submission.csv'),
                           index=False)
+    if azure_run:
+        azure_run.complete()
     print('finish!!!')
     
 if __name__ == "__main__":

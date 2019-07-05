@@ -33,7 +33,7 @@ N_CLASS = 5
 
 
 
-def run_model(epochs, batch_size, device, result_dir, debug):
+def run_model(epochs, batch_size, device, result_dir, debug, azure_run=None):
     
     train_csv = pd.read_csv(TRAIN_CSV_PATH)
     train, valid = train_test_split(train_csv, test_size=0.2, 
@@ -90,6 +90,11 @@ def run_model(epochs, batch_size, device, result_dir, debug):
         writer.add_scalar('loss', avg_loss, epoch)
         writer.add_scalar('val_loss', avg_val_loss, epoch)
         writer.add_scalar('val_kappa', val_kappa, epoch)
+        if azure_run:
+            azure_run.log('loss', avg_loss)
+            azure_run.log('val loss', avg_val_loss)
+            azure_run.log('val kappa', val_kappa)
+        
         is_best = bool(avg_val_loss < best_val_score)
         if is_best:
             best_val_score = avg_val_loss
