@@ -23,12 +23,13 @@ import utils
 
 class RetinopathyDataset(Dataset):
 
-    def __init__(self, df, mode, debug=False, on_memory=False):
+    def __init__(self, df, size, mode, debug=False, on_memory=False):
 
         if debug:
             self.df = df[:100]
         else:
             self.df = df
+        self.size = size
         self.mode = mode
         if self.mode == 'train':
             dir_path = utils.TRAIN_DIR_PATH
@@ -64,7 +65,7 @@ class RetinopathyDataset(Dataset):
         image = cv2.imread(img_name)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         transformer = transforms.Compose([transforms.ToPILImage(),
-                                          transforms.Resize((256, 256)),
+                                          transforms.Resize((self.size, self.size)),
                                           transforms.ToTensor()])
         image = transformer(image)
         if self.mode == 'train':

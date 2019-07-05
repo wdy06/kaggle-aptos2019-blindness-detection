@@ -36,6 +36,11 @@ args = parser.parse_args()
 def main():
     EPOCHS = 10
     BATCH_SIZE = 256
+    IMAGE_SIZE = 256
+    model_name = 'resnet34'
+    optimizer_name = 'adam'
+    loss_name = 'crossentropy'
+    lr = 0.001
     azure_run = None
     experiment_name = datetime.strftime(datetime.now(), '%Y%m%d%H%M%S')
     
@@ -52,18 +57,36 @@ def main():
         azure_run.log('experiment name', experiment_name)
         azure_run.log('epoch', EPOCHS)
         azure_run.log('batch size', BATCH_SIZE)
+        azure_run.log('image size', IMAGE_SIZE)
+        azure_run.log('model', model_name)
+        azure_run.log('optimizer', optimizer_name)
+        azure_run.log('loss', loss_name)
+        azure_run.log('lr', lr)
         
     os.mkdir(result_dir)
     print(f'created: {result_dir}')
     
     device = torch.device("cuda:0")
-    utils.run_model(epochs=EPOCHS, batch_size=BATCH_SIZE, device=device, 
-                    result_dir=result_dir, debug=args.debug, azure_run=azure_run)
+    config = {'epochs': EPOCHS,
+              'batch_size': BATCH_SIZE,
+              'image_size': IMAGE_SIZE,
+              'model_name': model_name,
+              'optimizer_name': optimizer_name,
+              'loss_name': loss_name,
+              'lr': lr, 
+              'device': device,
+              'result_dir': result_dir,
+              'debug': args.debug,
+              'azure_run': azure_run}
+    
+#     utils.run_model(epochs=EPOCHS, batch_size=BATCH_SIZE, device=device, 
+#                     result_dir=result_dir, debug=args.debug, azure_run=azure_run)
+    utils.run_model(**config)
 
     model = utils.load_pytorch_model('resnet34', os.path.join(result_dir, 'best_model'))
 
     test_csv = pd.read_csv(utils.TEST_CSV_PATH)
-    test_dataset = RetinopathyDataset(df=test_csv, mode='test')
+    test_dataset = RetinopathyDataset(df=test_csv, size=IMAGE_SIZE, mode='test')
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=BATCH_SIZE, 
                                               shuffle=False, pin_memory=True)
 

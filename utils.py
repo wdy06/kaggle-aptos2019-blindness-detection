@@ -33,24 +33,25 @@ N_CLASS = 5
 
 
 
-def run_model(epochs, batch_size, device, result_dir, debug, azure_run=None):
+def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_name, lr,
+              device, result_dir, debug, azure_run=None):
     
     train_csv = pd.read_csv(TRAIN_CSV_PATH)
     train, valid = train_test_split(train_csv, test_size=0.2, 
                                     stratify=train_csv['diagnosis'] , 
                                     random_state=42)
-    train_dataset = RetinopathyDataset(df=train, mode='train', debug=debug)
-    val_dataset = RetinopathyDataset(df=valid, mode='train', debug=debug)
+    train_dataset = RetinopathyDataset(df=train, size=image_size, mode='train', debug=debug)
+    val_dataset = RetinopathyDataset(df=valid, size=image_size, mode='train', debug=debug)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, 
                                                shuffle=True, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, 
                                              shuffle=False, pin_memory=True)
 
-    model = build_model('resnet34')
+    model = build_model(model_name)
     
-    optimizer = optim.Adam(model.parameters())
-    loss_func = nn.CrossEntropyLoss()
+    optimizer = build_optimizer(optimizer_name, model.parameters(), lr)
+    loss_func = build_loss(loss_name)
     
     writer = SummaryWriter(log_dir=result_dir)
 
@@ -124,6 +125,19 @@ def build_model(model_name, pretrained=True):
         model = resnet34(pretrained=pretrained)
         model.fc = nn.Linear(512, N_CLASS)
     return model
+
+def build_optimizer(optimizer_name, *args, **kwargs):
+    if optimizer_name == 'adam':
+        optimizer = optim.Adam(*args, **kwargs)
+    else:
+        raise ValueError('unknown optimizer name')
+    return optimizer
+
+def build_loss(loss_name):
+    if loss_name == 'crossentropy':
+        return nn.CrossEntropyLoss()
+    else:
+        raise ValueError('unknown loss name')
 
 def save_checkpoint(model, is_best, path):
     """Save checkpoint if a new best is achieved"""
