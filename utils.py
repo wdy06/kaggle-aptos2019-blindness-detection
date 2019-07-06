@@ -34,7 +34,7 @@ N_CLASS = 5
 
 
 def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_name, lr,
-              device, result_dir, debug, azure_run=None):
+              device, result_dir, debug, num_workers, azure_run=None):
     
     train_csv = pd.read_csv(TRAIN_CSV_PATH)
     train, valid = train_test_split(train_csv, test_size=0.2, 
@@ -44,9 +44,9 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
     val_dataset = RetinopathyDataset(df=valid, size=image_size, mode='train', debug=debug)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, 
-                                               shuffle=True, pin_memory=True)
+                                               shuffle=True, pin_memory=True, num_workers=num_workers)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, 
-                                             shuffle=False, pin_memory=True)
+                                             shuffle=False, pin_memory=True, num_workers=num_workers)
 
     model = build_model(model_name)
     

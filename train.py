@@ -42,6 +42,7 @@ def main():
     loss_name = 'crossentropy'
     lr = 0.001
     azure_run = None
+    num_workers = 64
     experiment_name = datetime.strftime(datetime.now(), '%Y%m%d%H%M%S')
     
     if args.debug:
@@ -77,6 +78,7 @@ def main():
               'device': device,
               'result_dir': result_dir,
               'debug': args.debug,
+              'num_workers': num_workers,
               'azure_run': azure_run}
     
 #     utils.run_model(epochs=EPOCHS, batch_size=BATCH_SIZE, device=device, 
@@ -88,7 +90,8 @@ def main():
     test_csv = pd.read_csv(utils.TEST_CSV_PATH)
     test_dataset = RetinopathyDataset(df=test_csv, size=IMAGE_SIZE, mode='test')
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=BATCH_SIZE, 
-                                              shuffle=False, pin_memory=True)
+                                              shuffle=False, pin_memory=True,
+                                              num_workers=num_workers)
 
     test_preds = utils.predict(model, test_loader, n_class=5, device=device)
     submission_csv = pd.read_csv(utils.SAMPLE_SUBMISSION_PATH)
