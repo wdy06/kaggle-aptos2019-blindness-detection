@@ -88,7 +88,8 @@ def main():
     model = utils.load_pytorch_model('resnet34', os.path.join(result_dir, 'best_model'))
 
     test_csv = pd.read_csv(utils.TEST_CSV_PATH)
-    test_dataset = RetinopathyDataset(df=test_csv, size=IMAGE_SIZE, mode='test')
+    test_tfms = utils.build_transform(size=IMAGE_SIZE, mode='test')
+    test_dataset = RetinopathyDataset(df=test_csv, mode='test', transform=test_tfms)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=BATCH_SIZE, 
                                               shuffle=False, pin_memory=True,
                                               num_workers=num_workers)

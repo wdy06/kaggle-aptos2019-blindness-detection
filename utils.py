@@ -18,6 +18,7 @@ from torchvision.models import resnet34
 from torchvision import transforms
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
+import albumentations
 
 from dataset import RetinopathyDataset
 
@@ -40,8 +41,12 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
     train, valid = train_test_split(train_csv, test_size=0.2, 
                                     stratify=train_csv['diagnosis'] , 
                                     random_state=42)
-    train_dataset = RetinopathyDataset(df=train, size=image_size, mode='train', debug=debug)
-    val_dataset = RetinopathyDataset(df=valid, size=image_size, mode='train', debug=debug)
+    train_tfms = build_transform(size=image_size, mode='train')
+    val_tfms = build_transform(size=image_size, mode='test')
+    train_dataset = RetinopathyDataset(df=train, mode='train', 
+                                       transform=train_tfms, debug=debug)
+    val_dataset = RetinopathyDataset(df=valid, mode='train', 
+                                     transform=val_tfms, debug=debug)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, 
                                                shuffle=True, pin_memory=True, num_workers=num_workers)
@@ -138,6 +143,22 @@ def build_loss(loss_name):
         return nn.CrossEntropyLoss()
     else:
         raise ValueError('unknown loss name')
+
+def build_transform(size, mode):
+    if mode == 'train':
+        transform = albumentations.Compose([
+            albumentations.Resize(size, size),
+            albumentations.Flip(),
+            albumentations.RandomBrightness(),
+            albumentations.ShiftScaleRotate(rotate_limit=15, scale_limit=0.10),
+            albumentations.Normalize(),
+        ])
+    elif mode == 'test':
+        transform = albumentations.Compose([
+            albumentations.Resize(size, size),
+            albumentations.Normalize(),
+        ])
+    return transform
 
 def save_checkpoint(model, is_best, path):
     """Save checkpoint if a new best is achieved"""

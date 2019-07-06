@@ -23,19 +23,20 @@ import utils
 
 class RetinopathyDataset(Dataset):
 
-    def __init__(self, df, size, mode, debug=False, on_memory=False):
+    def __init__(self, df, mode, transform, debug=False, on_memory=False):
 
         if debug:
             self.df = df[:100]
         else:
             self.df = df
-        self.size = size
+        #self.size = size
         self.mode = mode
         if self.mode == 'train':
             dir_path = utils.TRAIN_DIR_PATH
         elif self.mode == 'test':
             dir_path = utils.TEST_DIR_PATH
         self.dir_path = dir_path
+        self.transform = transform
         self.on_memory = on_memory
         images_data = []
         if on_memory:
@@ -64,10 +65,9 @@ class RetinopathyDataset(Dataset):
         img_name = os.path.join(self.dir_path, self.df.iloc[idx]['id_code'] + '.png')
         image = cv2.imread(img_name)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        transformer = transforms.Compose([transforms.ToPILImage(),
-                                          transforms.Resize((self.size, self.size)),
-                                          transforms.ToTensor()])
-        image = transformer(image)
+        image = self.transform(image=image)
+        image = image['image']
+        image = image.transpose((2, 0, 1))
         if self.mode == 'train':
             label = torch.tensor(self.df.iloc[idx]['diagnosis'])
             return image, label
