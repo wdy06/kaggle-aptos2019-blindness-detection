@@ -61,7 +61,7 @@ def main():
         azure_run.log('image size', IMAGE_SIZE)
         azure_run.log('model', model_name)
         azure_run.log('optimizer', optimizer_name)
-        azure_run.log('loss', loss_name)
+        azure_run.log('loss_name', loss_name)
         azure_run.log('lr', lr)
         
     os.mkdir(result_dir)
