@@ -168,7 +168,7 @@ def save_checkpoint(model, is_best, path):
         print (f"=> Saving a new best to {path}")
         save_pytorch_model(model, path)  # save checkpoint
     else:
-        print ("=> Validation Accuracy did not improve")
+        print ("=> Validation metric did not improve")
         
         
 def save_pytorch_model(model, path):
