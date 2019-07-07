@@ -1,0 +1,7 @@
+__pycache__/
+notebooks/
+results/
+.aml_config/
+.amlignore
+.ipynb_checkpoints/
+data/
