@@ -142,12 +142,17 @@ def build_loss(loss_name):
         raise ValueError('unknown loss name')
 
 def build_transform(size, mode):
+    border_mode = cv2.BORDER_CONSTANT
     if mode == 'train':
         transform = albumentations.Compose([
             albumentations.Resize(size, size),
             albumentations.Flip(),
-            albumentations.RandomBrightness(),
-            albumentations.ShiftScaleRotate(rotate_limit=15, scale_limit=0.10),
+            albumentations.Rotate(border_mode=border_mode),
+            albumentations.ShiftScaleRotate(rotate_limit=15, scale_limit=0.10, 
+                                            border_mode=border_mode),
+            albumentations.RandomBrightness(limit=0.5),
+            albumentations.RandomContrast(limit=0.3),
+            albumentations.RandomGamma(),
             albumentations.Normalize(),
         ])
     elif mode == 'test':
