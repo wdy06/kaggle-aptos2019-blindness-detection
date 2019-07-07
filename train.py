@@ -48,6 +48,7 @@ def main():
     experiment_name = datetime.strftime(datetime.now(), '%Y%m%d%H%M%S')
     
     try:
+        
         if args.debug:
             print('running in debug mode')
             EPOCHS = 2
@@ -67,10 +68,13 @@ def main():
             azure_run.log('loss_name', loss_name)
             azure_run.log('lr', lr)
             
-            tb_writer = SummaryWriter(log_dir=result_dir)
 
         os.mkdir(result_dir)
         print(f'created: {result_dir}')
+        
+        if not args.debug:
+            tb_writer = SummaryWriter(log_dir=result_dir)
+            
 
         device = torch.device("cuda:0")
         config = {'epochs': EPOCHS,
