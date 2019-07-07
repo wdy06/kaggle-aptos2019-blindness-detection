@@ -35,7 +35,7 @@ N_CLASS = 5
 
 
 def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_name, lr,
-              device, result_dir, debug, num_workers, azure_run=None):
+              device, result_dir, debug, num_workers, azure_run=None, writer=None):
     
     train_csv = pd.read_csv(TRAIN_CSV_PATH)
     train, valid = train_test_split(train_csv, test_size=0.2, 
@@ -58,7 +58,6 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
     optimizer = build_optimizer(optimizer_name, model.parameters(), lr)
     loss_func = build_loss(loss_name)
     
-    writer = SummaryWriter(log_dir=result_dir)
 
     save_path = os.path.join(result_dir, 'best_model')
     model.to(device)
@@ -93,9 +92,10 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
                                       val_dataset.df['diagnosis'],
                                       weights='quadratic')
         print(f'epoch {epoch+1} / {epochs}, loss: {avg_loss:.5}, val_loss: {avg_val_loss:.5}, val_kappa: {val_kappa:.5}')
-        writer.add_scalar('loss', avg_loss, epoch)
-        writer.add_scalar('val_loss', avg_val_loss, epoch)
-        writer.add_scalar('val_kappa', val_kappa, epoch)
+        if writer:
+            writer.add_scalar('loss', avg_loss, epoch)
+            writer.add_scalar('val_loss', avg_val_loss, epoch)
+            writer.add_scalar('val_kappa', val_kappa, epoch)
         if azure_run:
             azure_run.log('loss', avg_loss)
             azure_run.log('val loss', avg_val_loss)
@@ -106,9 +106,6 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
             best_val_score = avg_val_loss
             print(f'update best score !! current best score: {best_val_score:.5} !!')
         save_checkpoint(model, is_best, save_path)
-    
-    writer.export_scalars_to_json(os.path.join(result_dir, 'all_scalars.json'))
-    writer.close()
     
     
     
