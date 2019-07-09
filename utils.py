@@ -38,74 +38,91 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
               device, result_dir, debug, num_workers, azure_run=None, writer=None):
     
     train_csv = pd.read_csv(TRAIN_CSV_PATH)
-    train, valid = train_test_split(train_csv, test_size=0.2, 
-                                    stratify=train_csv['diagnosis'] , 
-                                    random_state=42)
+    if debug:
+        train_csv = train_csv[:100]
     train_tfms = build_transform(size=image_size, mode='train')
     val_tfms = build_transform(size=image_size, mode='test')
-    train_dataset = RetinopathyDataset(df=train, mode='train', 
-                                       transform=train_tfms, debug=debug)
-    val_dataset = RetinopathyDataset(df=valid, mode='train', 
-                                     transform=val_tfms, debug=debug)
-
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, 
-                                               shuffle=True, pin_memory=True, num_workers=num_workers)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, 
-                                             shuffle=False, pin_memory=True, num_workers=num_workers)
-
-    model = build_model(model_name)
     
-    optimizer = build_optimizer(optimizer_name, model.parameters(), lr)
-    loss_func = build_loss(loss_name)
+    skf = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
     
-
-    save_path = os.path.join(result_dir, 'best_model')
-    model.to(device)
-    best_val_score = 1000000
-    for epoch in tqdm(range(epochs)):
-        model.train()
-        avg_loss = 0.
-        # train
-        for data, target in tqdm(train_loader):
-            data, target = data.to(device), target.to(device)
-            optimizer.zero_grad()
-            y_pred = model(data)
-            loss = loss_func(y_pred, target)
-            loss.backward()
-            optimizer.step()
-            avg_loss += loss.item()
-        avg_loss /= len(train_loader)
-
-        # validation
-        model.eval()
-        avg_val_loss = 0.
-        valid_preds_fold = np.zeros((len(val_dataset), 5))
-        for i, (data, target) in enumerate(val_loader):
-            data, target = data.to(device), target.to(device)
-            with torch.no_grad():
-                y_pred = model(data).detach()
-
-            avg_val_loss += loss_func(y_pred, target).item()
-            valid_preds_fold[i * batch_size:(i + 1) * batch_size] = F.softmax(y_pred, dim=1).cpu().numpy()
-        avg_val_loss /= len(val_loader)
-        val_kappa = cohen_kappa_score(np.argmax(valid_preds_fold, axis=1),
-                                      val_dataset.df['diagnosis'],
-                                      weights='quadratic')
-        print(f'epoch {epoch+1} / {epochs}, loss: {avg_loss:.5}, val_loss: {avg_val_loss:.5}, val_kappa: {val_kappa:.5}')
-        if writer:
-            writer.add_scalar('loss', avg_loss, epoch)
-            writer.add_scalar('val_loss', avg_val_loss, epoch)
-            writer.add_scalar('val_kappa', val_kappa, epoch)
+#     train, valid = train_test_split(train_csv, test_size=0.2, 
+#                                     stratify=train_csv['diagnosis'] , 
+#                                     random_state=42)
+    oof_preds = np.zeros((len(train_csv), N_CLASS))
+    for i_fold, (train_index, valid_index)  in enumerate(skf.split(train_csv, train_csv['diagnosis'])):
         if azure_run:
-            azure_run.log('loss', avg_loss)
-            azure_run.log('val loss', avg_val_loss)
-            azure_run.log('val kappa', val_kappa)
+            child_run = azure_run.child_run()
+        train = train_csv.iloc[train_index]
+        valid = train_csv.iloc[valid_index]
+        train_dataset = RetinopathyDataset(df=train, mode='train', 
+                                           transform=train_tfms)
+        val_dataset = RetinopathyDataset(df=valid, mode='train', 
+                                         transform=val_tfms)
+
+        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, 
+                                                   shuffle=True, pin_memory=True, num_workers=num_workers)
+        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, 
+                                                 shuffle=False, pin_memory=True, num_workers=num_workers)
+
+        model = build_model(model_name)
+
+        optimizer = build_optimizer(optimizer_name, model.parameters(), lr)
+        loss_func = build_loss(loss_name)
+
+
+        save_path = os.path.join(result_dir, f'model_fold{i_fold}')
+        model.to(device)
+        best_val_score = 1000000
+        for epoch in tqdm(range(epochs)):
+            model.train()
+            avg_loss = 0.
+            # train
+            for data, target in tqdm(train_loader):
+                data, target = data.to(device), target.to(device)
+                optimizer.zero_grad()
+                y_pred = model(data)
+                loss = loss_func(y_pred, target)
+                loss.backward()
+                optimizer.step()
+                avg_loss += loss.item()
+            avg_loss /= len(train_loader)
+
+            # validation
+            model.eval()
+            avg_val_loss = 0.
+            valid_preds_fold = np.zeros((len(val_dataset), N_CLASS))
+            for i, (data, target) in enumerate(val_loader):
+                data, target = data.to(device), target.to(device)
+                with torch.no_grad():
+                    y_pred = model(data).detach()
+
+                avg_val_loss += loss_func(y_pred, target).item()
+                valid_preds_fold[i * batch_size:(i + 1) * batch_size] = F.softmax(y_pred, dim=1).cpu().numpy()
+            avg_val_loss /= len(val_loader)
+            val_kappa = cohen_kappa_score(np.argmax(valid_preds_fold, axis=1),
+                                          val_dataset.df['diagnosis'],
+                                          weights='quadratic')
+            print(f'fold {i_fold+1} / epoch {epoch+1} / {epochs}, loss: {avg_loss:.5}, val_loss: {avg_val_loss:.5}, val_kappa: {val_kappa:.5}')
+            if writer:
+                writer.add_scalar('loss', avg_loss, epoch)
+                writer.add_scalar('val_loss', avg_val_loss, epoch)
+                writer.add_scalar('val_kappa', val_kappa, epoch)
+            if azure_run:
+                child_run.log('loss', avg_loss)
+                child_run.log('val loss', avg_val_loss)
+                child_run.log('val kappa', val_kappa)
+
+            is_best = bool(avg_val_loss < best_val_score)
+            if is_best:
+                best_val_score = avg_val_loss
+                print(f'update best score !! current best score: {best_val_score:.5} !!')
+            save_checkpoint(model, is_best, save_path)
         
-        is_best = bool(avg_val_loss < best_val_score)
-        if is_best:
-            best_val_score = avg_val_loss
-            print(f'update best score !! current best score: {best_val_score:.5} !!')
-        save_checkpoint(model, is_best, save_path)
+        fold_best_model = load_pytorch_model(model_name, save_path)
+        oof_preds[valid_index] = predict(fold_best_model, val_loader, N_CLASS, device)
+    
+    return oof_preds, train_csv['diagnosis']
+        
     
     
     

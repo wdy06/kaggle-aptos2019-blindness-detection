@@ -19,6 +19,7 @@ import logging
 from datetime import datetime
 import warnings
 from tqdm import tqdm
+from sklearn.metrics import cohen_kappa_score
 
 from azureml.core import Workspace, Experiment
 from torch.utils.tensorboard import SummaryWriter
@@ -36,6 +37,7 @@ args = parser.parse_args()
 
 def main():
     EPOCHS = 20
+    N_FOLDS = 5
     BATCH_SIZE = 256
     IMAGE_SIZE = 256
     model_name = 'resnet34'
@@ -52,6 +54,7 @@ def main():
         if args.debug:
             print('running in debug mode')
             EPOCHS = 2
+            N_FOLDS = 2
         if args.debug:
             result_dir = os.path.join(utils.RESULT_DIR, 'debug-' + experiment_name)
         else:
@@ -92,9 +95,11 @@ def main():
                   'writer': tb_writer}
         
 
-        utils.run_model(**config)
-
-        model = utils.load_pytorch_model('resnet34', os.path.join(result_dir, 'best_model'))
+        oof_preds, y_true = utils.run_model(**config)
+        val_kappa = cohen_kappa_score(np.argmax(oof_preds, axis=1), y_true)
+        print(f'best val kappa: {val_kappa}')
+        if azure_run:
+            azure_run.log('best val kappa', val_kappa)
 
         test_csv = pd.read_csv(utils.TEST_CSV_PATH)
         test_tfms = utils.build_transform(size=IMAGE_SIZE, mode='test')
@@ -103,7 +108,11 @@ def main():
                                                   shuffle=False, pin_memory=True,
                                                   num_workers=num_workers)
 
-        test_preds = utils.predict(model, test_loader, n_class=5, device=device)
+        test_preds = np.zeros((len(test_csv), utils.N_CLASS))
+        for i in range(N_FOLDS):
+            model = utils.load_pytorch_model('resnet34', os.path.join(result_dir, f'model_fold{i}'))
+            test_preds += utils.predict(model, test_loader, n_class=5, device=device)
+            
         submission_csv = pd.read_csv(utils.SAMPLE_SUBMISSION_PATH)
         submission_csv['diagnosis'] = np.argmax(test_preds, axis=1)
         submission_csv.to_csv(os.path.join(result_dir, 'submission.csv'),
