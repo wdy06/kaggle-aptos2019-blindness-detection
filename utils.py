@@ -49,7 +49,7 @@ def run_model(epochs, n_folds, batch_size, image_size, model_name, optimizer_nam
 #                                     stratify=train_csv['diagnosis'] , 
 #                                     random_state=42)
     oof_preds = np.zeros((len(train_csv), N_CLASS))
-    for i_fold, (train_index, valid_index)  in enumerate(skf.split(train_csv, train_csv['diagnosis'])):
+    for i_fold, (train_index, valid_index)  in tqdm(enumerate(skf.split(train_csv, train_csv['diagnosis']))):
         if azure_run:
             child_run = azure_run.child_run()
         train = train_csv.iloc[train_index]
