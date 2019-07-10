@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torchvision.models import resnet34
+from torchvision.models import resnet34, resnet50
 from torchvision import transforms
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
@@ -149,6 +149,11 @@ def build_model(model_name, pretrained=True):
     if model_name == 'resnet34':
         model = resnet34(pretrained=pretrained)
         model.fc = nn.Linear(512, N_CLASS)
+    elif model_name == 'resnet50':
+        model = resnet50(pretrained=pretrained)
+        model.fc = nn.Linear(2048, N_CLASS)
+    else:
+        raise ValueError('unknown model name')
     return model
 
 def build_optimizer(optimizer_name, *args, **kwargs):

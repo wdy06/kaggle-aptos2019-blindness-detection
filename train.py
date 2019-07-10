@@ -33,14 +33,18 @@ parser.add_argument("--debug", help="run debug mode",
                     action="store_true")
 parser.add_argument("--no_cache", help="extract feature without cache",
                     action="store_true")
+parser.add_argument('--model', '-m', type=str, default='resnet34',
+                    help='cnn model name')
+parser.add_argument('--batch', '-B', type=int, default=64,
+                    help='batch size')
 args = parser.parse_args()
 
 def main():
     EPOCHS = 20
     N_FOLDS = 5
-    BATCH_SIZE = 256
+    BATCH_SIZE = args.batch
     IMAGE_SIZE = 256
-    model_name = 'resnet34'
+    model_name = args.model
     optimizer_name = 'adam'
     loss_name = 'crossentropy'
     lr = 0.001
@@ -111,7 +115,7 @@ def main():
 
         test_preds = np.zeros((len(test_csv), utils.N_CLASS))
         for i in range(N_FOLDS):
-            model = utils.load_pytorch_model('resnet34', os.path.join(result_dir, f'model_fold{i}'))
+            model = utils.load_pytorch_model(model_name, os.path.join(result_dir, f'model_fold{i}'))
             test_preds += utils.predict(model, test_loader, n_class=5, device=device)
             
         submission_csv = pd.read_csv(utils.SAMPLE_SUBMISSION_PATH)
