@@ -34,7 +34,7 @@ N_CLASS = 5
 
 
 
-def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_name, lr,
+def run_model(epochs, n_folds, batch_size, image_size, model_name, optimizer_name, loss_name, lr,
               device, result_dir, debug, num_workers, azure_run=None, writer=None):
     
     train_csv = pd.read_csv(TRAIN_CSV_PATH)
@@ -43,7 +43,7 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
     train_tfms = build_transform(size=image_size, mode='train')
     val_tfms = build_transform(size=image_size, mode='test')
     
-    skf = StratifiedKFold(n_splits=5, random_state=42, shuffle=True)
+    skf = StratifiedKFold(n_splits=n_folds, random_state=42, shuffle=True)
     
 #     train, valid = train_test_split(train_csv, test_size=0.2, 
 #                                     stratify=train_csv['diagnosis'] , 
@@ -67,6 +67,7 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
         model = build_model(model_name)
 
         optimizer = build_optimizer(optimizer_name, model.parameters(), lr)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs/4, eta_min=lr/100)
         loss_func = build_loss(loss_name)
 
 
@@ -102,7 +103,11 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
             val_kappa = cohen_kappa_score(np.argmax(valid_preds_fold, axis=1),
                                           val_dataset.df['diagnosis'],
                                           weights='quadratic')
-            print(f'fold {i_fold+1} / epoch {epoch+1} / {epochs}, loss: {avg_loss:.5}, val_loss: {avg_val_loss:.5}, val_kappa: {val_kappa:.5}')
+            print(f'fold {i_fold+1} / {n_folds}, epoch {epoch+1} / {epochs}, loss: {avg_loss:.5}, val_loss: {avg_val_loss:.5}, val_kappa: {val_kappa:.5}')
+            
+            # step scheduler
+            scheduler.step()
+            
             if writer:
                 writer.add_scalar('loss', avg_loss, epoch)
                 writer.add_scalar('val_loss', avg_val_loss, epoch)
@@ -111,6 +116,7 @@ def run_model(epochs, batch_size, image_size, model_name, optimizer_name, loss_n
                 child_run.log('loss', avg_loss)
                 child_run.log('val loss', avg_val_loss)
                 child_run.log('val kappa', val_kappa)
+                child_run.log('lr', scheduler.get_lr()[0])
 
             is_best = bool(avg_val_loss < best_val_score)
             if is_best:

@@ -81,6 +81,7 @@ def main():
 
         device = torch.device("cuda:0")
         config = {'epochs': EPOCHS,
+                  'n_folds': N_FOLDS,
                   'batch_size': BATCH_SIZE,
                   'image_size': IMAGE_SIZE,
                   'model_name': model_name,
