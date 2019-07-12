@@ -63,6 +63,10 @@ class RetinopathyDataset(Dataset):
     
     def __getitem__(self, idx):
         img_name = os.path.join(self.dir_path, self.df.iloc[idx]['id_code'] + '.png')
+        if not os.path.exists(img_name):
+            img_name = os.path.join(self.dir_path, self.df.iloc[idx]['id_code'] + '.jpeg')
+        if not os.path.exists(img_name):
+            print(img_name)
         image = cv2.imread(img_name)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = self.transform(image=image)
