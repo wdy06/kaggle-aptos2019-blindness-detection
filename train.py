@@ -33,6 +33,8 @@ parser.add_argument("--debug", help="run debug mode",
                     action="store_true")
 parser.add_argument("--no_cache", help="extract feature without cache",
                     action="store_true")
+parser.add_argument("--multi", help="use multi gpu",
+                    action="store_true")
 parser.add_argument('--model', '-m', type=str, default='resnet34',
                     help='cnn model name')
 parser.add_argument('--batch', '-B', type=int, default=64,
@@ -40,7 +42,7 @@ parser.add_argument('--batch', '-B', type=int, default=64,
 args = parser.parse_args()
 
 def main():
-    EPOCHS = 20
+    EPOCHS = 40
     N_FOLDS = 5
     BATCH_SIZE = args.batch
     IMAGE_SIZE = 256
@@ -53,6 +55,7 @@ def main():
     num_workers = 64
     experiment_name = datetime.strftime(datetime.now(), '%Y%m%d%H%M%S')
     
+    print(f'found {torch.cuda.device_count()} gpus !!')
     try:
         
         if args.debug:
@@ -74,6 +77,8 @@ def main():
             azure_run.log('optimizer', optimizer_name)
             azure_run.log('loss_name', loss_name)
             azure_run.log('lr', lr)
+        if args.multi:
+            print('use multi gpu !!')
             
 
         os.mkdir(result_dir)
@@ -86,6 +91,7 @@ def main():
         device = torch.device("cuda:0")
         config = {'epochs': EPOCHS,
                   'n_folds': N_FOLDS,
+                  'multi': args.multi,
                   'batch_size': BATCH_SIZE,
                   'image_size': IMAGE_SIZE,
                   'model_name': model_name,

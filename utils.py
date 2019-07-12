@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import cohen_kappa_score
 from tqdm import tqdm, tqdm_notebook
 import cv2
+from collections import OrderedDict
 
 from torch.utils.data import Dataset
 import torchvision
@@ -24,9 +25,11 @@ from dataset import RetinopathyDataset
 
 
 DIR_PATH = os.path.dirname(os.path.abspath(__file__))
-TRAIN_CSV_PATH = os.path.join(DIR_PATH, 'data/train.csv')
+#TRAIN_CSV_PATH = os.path.join(DIR_PATH, 'data/train.csv')
+TRAIN_CSV_PATH = os.path.join(DIR_PATH, 'data/train_all.csv')
 TEST_CSV_PATH = os.path.join(DIR_PATH, 'data/test.csv')
-TRAIN_DIR_PATH = os.path.join(DIR_PATH, 'data/train_images')
+#TRAIN_DIR_PATH = os.path.join(DIR_PATH, 'data/train_images')
+TRAIN_DIR_PATH = os.path.join(DIR_PATH, 'data/train_all')
 TEST_DIR_PATH = os.path.join(DIR_PATH, 'data/test_images')
 SAMPLE_SUBMISSION_PATH = os.path.join(DIR_PATH, 'data/sample_submission.csv')
 RESULT_DIR = os.path.join(DIR_PATH, 'results')
@@ -34,8 +37,10 @@ N_CLASS = 5
 
 
 
-def run_model(epochs, n_folds, batch_size, image_size, model_name, optimizer_name, loss_name, lr,
-              device, result_dir, debug, num_workers, azure_run=None, writer=None):
+def run_model(epochs, n_folds, batch_size, image_size, model_name, 
+              optimizer_name, loss_name, lr, multi,
+              device, result_dir, debug, num_workers, 
+              azure_run=None, writer=None):
     
     train_csv = pd.read_csv(TRAIN_CSV_PATH)
     if debug:
@@ -65,6 +70,8 @@ def run_model(epochs, n_folds, batch_size, image_size, model_name, optimizer_nam
                                                  shuffle=False, pin_memory=True, num_workers=num_workers)
 
         model = build_model(model_name)
+        if multi:
+            model = nn.DataParallel(model)
 
         optimizer = build_optimizer(optimizer_name, model.parameters(), lr)
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs/4, eta_min=lr/100)
@@ -125,6 +132,8 @@ def run_model(epochs, n_folds, batch_size, image_size, model_name, optimizer_nam
             save_checkpoint(model, is_best, save_path)
         
         fold_best_model = load_pytorch_model(model_name, save_path)
+        if multi:
+            fold_best_model = nn.DataParallel(fold_best_model)
         oof_preds[valid_index] = predict(fold_best_model, val_loader, N_CLASS, device)
     
     return oof_preds, train_csv['diagnosis']
@@ -204,11 +213,13 @@ def save_pytorch_model(model, path):
     
 def load_pytorch_model(model_name, path, *args, **kwargs):
     state_dict = torch.load(path)
-#     new_state_dict = OrderedDict()
-#     for k, v in state_dict.items():
-#         name = k[7:] # remove `module.`
-#         new_state_dict[name] = v
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        name = k
+        if k[:7] == 'module.':
+            name = k[7:] # remove `module.`
+        new_state_dict[name] = v
     model = build_model(model_name, pretrained=False)
-    #model.load_state_dict(new_state_dict)
-    model.load_state_dict(state_dict)
+    model.load_state_dict(new_state_dict)
+    #model.load_state_dict(state_dict)
     return model
