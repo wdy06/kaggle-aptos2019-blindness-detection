@@ -39,13 +39,15 @@ parser.add_argument('--model', '-m', type=str, default='resnet34',
                     help='cnn model name')
 parser.add_argument('--batch', '-B', type=int, default=64,
                     help='batch size')
+parser.add_argument('--size', '-S', type=int, default=256,
+                    help='image size')
 args = parser.parse_args()
 
 def main():
     EPOCHS = 50
     N_FOLDS = 5
     BATCH_SIZE = args.batch
-    IMAGE_SIZE = 256
+    IMAGE_SIZE = args.size
     model_name = args.model
     optimizer_name = 'adam'
     loss_name = 'crossentropy'
@@ -105,7 +107,7 @@ def main():
                   'azure_run': azure_run,
                   'writer': tb_writer}
         
-
+        print(config)
         oof_preds, y_true = utils.run_model(**config)
         val_kappa = cohen_kappa_score(np.argmax(oof_preds, axis=1), y_true)
         print(f'best val kappa: {val_kappa}')
