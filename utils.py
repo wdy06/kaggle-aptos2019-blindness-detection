@@ -44,7 +44,7 @@ def run_model(epochs, n_folds, batch_size, image_size, model_name,
     
     train_csv = pd.read_csv(TRAIN_CSV_PATH)
     if debug:
-        train_csv = train_csv[:100]
+        train_csv = train_csv[:1000]
     train_tfms = build_transform(size=image_size, mode='train')
     val_tfms = build_transform(size=image_size, mode='test')
     
@@ -74,7 +74,7 @@ def run_model(epochs, n_folds, batch_size, image_size, model_name,
             model = nn.DataParallel(model)
 
         optimizer = build_optimizer(optimizer_name, model.parameters(), lr)
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs/4, eta_min=lr/100)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=lr/100)
         loss_func = build_loss(loss_name)
 
 

@@ -42,7 +42,7 @@ parser.add_argument('--batch', '-B', type=int, default=64,
 args = parser.parse_args()
 
 def main():
-    EPOCHS = 40
+    EPOCHS = 50
     N_FOLDS = 5
     BATCH_SIZE = args.batch
     IMAGE_SIZE = 256
