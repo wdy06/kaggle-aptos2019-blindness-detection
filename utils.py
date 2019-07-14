@@ -20,6 +20,7 @@ from torchvision import transforms
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 import albumentations
+import pretrainedmodels
 
 from dataset import RetinopathyDataset
 
@@ -161,6 +162,14 @@ def build_model(model_name, pretrained=True):
     elif model_name == 'resnet50':
         model = resnet50(pretrained=pretrained)
         model.fc = nn.Linear(2048, N_CLASS)
+    elif model_name == 'se_resnext50_32x4d':
+        if pretrained:
+            model = pretrainedmodels.__dict__[model_name](num_classes=1000, 
+                                                          pretrained='imagenet')
+        else:
+            model = pretrainedmodels.__dict__[model_name](num_classes=1000)
+        model.avg_pool = nn.AdaptiveAvgPool2d((1,1))
+        model.last_linear = nn.Linear(2048, 5)
     else:
         raise ValueError('unknown model name')
     return model
