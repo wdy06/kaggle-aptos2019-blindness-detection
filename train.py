@@ -20,6 +20,7 @@ from datetime import datetime
 import warnings
 from tqdm import tqdm
 from sklearn.metrics import cohen_kappa_score
+from sklearn.model_selection import StratifiedKFold
 
 from azureml.core import Workspace, Experiment
 from torch.utils.tensorboard import SummaryWriter
@@ -32,6 +33,8 @@ parser = argparse.ArgumentParser(description='aptos2019 blindness detection on k
 parser.add_argument("--debug", help="run debug mode",
                     action="store_true")
 parser.add_argument("--no_cache", help="extract feature without cache",
+                    action="store_true")
+parser.add_argument("--cv", help="do cross validation",
                     action="store_true")
 parser.add_argument("--multi", help="use multi gpu",
                     action="store_true")
@@ -79,6 +82,7 @@ def main():
             azure_run.log('optimizer', optimizer_name)
             azure_run.log('loss_name', loss_name)
             azure_run.log('lr', lr)
+            azure_run.log('cv', args.cv)
         if args.multi:
             print('use multi gpu !!')
             
@@ -91,8 +95,9 @@ def main():
             
 
         device = torch.device("cuda:0")
-        config = {'epochs': EPOCHS,
-                  'n_folds': N_FOLDS,
+        config = {
+                  'epochs': EPOCHS,
+                  #'n_folds': N_FOLDS,
                   'multi': args.multi,
                   'batch_size': BATCH_SIZE,
                   'image_size': IMAGE_SIZE,
@@ -101,15 +106,50 @@ def main():
                   'loss_name': loss_name,
                   'lr': lr, 
                   'device': device,
-                  'result_dir': result_dir,
-                  'debug': args.debug,
+                  #'result_dir': result_dir,
+                  #'debug': args.debug,
                   'num_workers': num_workers,
-                  'azure_run': azure_run,
+                  #'azure_run': azure_run,
                   'writer': tb_writer}
         
         print(config)
-        oof_preds, y_true = utils.run_model(**config)
-        val_kappa = cohen_kappa_score(np.argmax(oof_preds, axis=1), y_true)
+        
+        train_df = pd.read_csv(utils.TRAIN_CSV_PATH)
+        if args.debug:
+            train_df = train_df[:1000]
+        config['df'] = train_df
+        
+        skf = StratifiedKFold(n_splits=N_FOLDS, random_state=41, shuffle=True)
+        indices = list(skf.split(train_df, train_df['diagnosis']))
+        if not args.cv:
+            print('do not use cross validation')
+            indices = [indices[0]]
+            
+        # cross validation
+        oof_preds = np.zeros((len(train_df), utils.N_CLASS))
+        for i_fold, (train_index, valid_index) in tqdm(enumerate(indices)):
+            model_path = os.path.join(result_dir, f'model_fold{i_fold}')
+            config['train_index'] = train_index
+            config['valid_index'] = valid_index
+            config['model_path'] = model_path
+            if azure_run:
+                if i_fold == 0:
+                    config['azure_run'] = azure_run
+                    y_pred, y_true = utils.run_model(**config)
+                else:
+                    with azure_run.child_run() as child:
+                        conifg['azure_run'] = child
+                        y_pred, y_true = utils.run_model(**config)
+            else:
+                y_pred, y_true = utils.run_model(**config)
+            if args.cv:
+                oof_preds[valid_index] = y_pred
+        #oof_preds, y_true = utils.run_model(**config)
+        if args.cv:
+            val_kappa = cohen_kappa_score(np.argmax(oof_preds, axis=1), train_df['diagnosis'])
+        else:
+            val_kappa = cohen_kappa_score(np.argmax(y_pred, axis=1), y_true)
+            
         print(f'best val kappa: {val_kappa}')
         if azure_run:
             azure_run.log('best val kappa', val_kappa)
@@ -122,7 +162,7 @@ def main():
                                                   num_workers=num_workers)
 
         test_preds = np.zeros((len(test_csv), utils.N_CLASS))
-        for i in range(N_FOLDS):
+        for i in range(len(indices)):
             model = utils.load_pytorch_model(model_name, os.path.join(result_dir, f'model_fold{i}'))
             test_preds += utils.predict(model, test_loader, n_class=5, device=device)
             
