@@ -27,6 +27,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 import utils
+import slack
 from dataset import RetinopathyDataset
 
 parser = argparse.ArgumentParser(description='aptos2019 blindness detection on kaggle')
@@ -46,7 +47,7 @@ parser.add_argument('--size', '-S', type=int, default=256,
                     help='image size')
 args = parser.parse_args()
 
-def main():
+def main():q
     EPOCHS = 50
     N_FOLDS = 5
     BATCH_SIZE = args.batch
@@ -65,7 +66,7 @@ def main():
         
         if args.debug:
             print('running in debug mode')
-            EPOCHS = 2
+            EPOCHS = 1
             N_FOLDS = 2
         if args.debug:
             result_dir = os.path.join(utils.RESULT_DIR, 'debug-' + experiment_name)
@@ -82,7 +83,10 @@ def main():
             azure_run.log('optimizer', optimizer_name)
             azure_run.log('loss_name', loss_name)
             azure_run.log('lr', lr)
-            azure_run.log('cv', args.cv)
+            if args.cv:
+                azure_run.log('cv', N_FOLDS)
+            else:
+                azure_run.log('cv', 0)
         if args.multi:
             print('use multi gpu !!')
             
@@ -90,8 +94,8 @@ def main():
         os.mkdir(result_dir)
         print(f'created: {result_dir}')
         
-        if not args.debug:
-            tb_writer = SummaryWriter(log_dir=result_dir)
+#         if not args.debug:
+#             tb_writer = SummaryWriter(log_dir=result_dir)
             
 
         device = torch.device("cuda:0")
@@ -110,10 +114,13 @@ def main():
                   #'debug': args.debug,
                   'num_workers': num_workers,
                   #'azure_run': azure_run,
-                  'writer': tb_writer}
+                  #'writer': tb_writer
+        }
         
         print(config)
         
+        if not args.debug:
+            slack.notify_start(experiment_name, config)
         train_df = pd.read_csv(utils.TRAIN_CSV_PATH)
         if args.debug:
             train_df = train_df[:1000]
@@ -172,12 +179,19 @@ def main():
                               index=False)
         
         print('finish!!!')
+        if not args.debug:
+            slack.notify_finish(experiment_name, config, val_kappa)
         
-    except KeyboardInterrupt:
-        pass
+    except KeyboardInterrupt as e:
+        if not args.debug:
+            slack.notify_fail(experiment_name, config, 
+                              e.__class__.__name__, str(e))
     except Exception as e:
         if azure_run:
             azure_run.fail(e)
+        if not args.debug:
+            slack.notify_fail(experiment_name, config, 
+                              e.__class__.__name__, str(e))
         raise
     finally:
         if azure_run:
