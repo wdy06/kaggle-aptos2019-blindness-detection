@@ -47,7 +47,7 @@ parser.add_argument('--size', '-S', type=int, default=256,
                     help='image size')
 args = parser.parse_args()
 
-def main():q
+def main():
     EPOCHS = 50
     N_FOLDS = 5
     BATCH_SIZE = args.batch
