@@ -30,7 +30,8 @@ DIR_PATH = os.path.dirname(os.path.abspath(__file__))
 TRAIN_CSV_PATH = os.path.join(DIR_PATH, 'data/train_all.csv')
 TEST_CSV_PATH = os.path.join(DIR_PATH, 'data/test.csv')
 #TRAIN_DIR_PATH = os.path.join(DIR_PATH, 'data/train_images')
-TRAIN_DIR_PATH = os.path.join(DIR_PATH, 'data/train_all')
+#TRAIN_DIR_PATH = os.path.join(DIR_PATH, 'data/train_all')
+TRAIN_DIR_PATH = os.path.join(DIR_PATH, 'data/train_all_crop')
 TEST_DIR_PATH = os.path.join(DIR_PATH, 'data/test_images')
 SAMPLE_SUBMISSION_PATH = os.path.join(DIR_PATH, 'data/sample_submission.csv')
 RESULT_DIR = os.path.join(DIR_PATH, 'results')
@@ -219,3 +220,21 @@ def load_pytorch_model(model_name, path, *args, **kwargs):
     model.load_state_dict(new_state_dict)
     #model.load_state_dict(state_dict)
     return model
+
+def crop_image_from_gray(img,tol=7):
+    if img.ndim ==2:
+        mask = img>tol
+        return img[np.ix_(mask.any(1),mask.any(0))]
+    elif img.ndim==3:
+        gray_img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        mask = gray_img>tol
+        
+        check_shape = img[:,:,0][np.ix_(mask.any(1),mask.any(0))].shape[0]
+        if (check_shape == 0): # image is too dark so that we crop out everything,
+            return img # return original image
+        else:
+            img1=img[:,:,0][np.ix_(mask.any(1),mask.any(0))]
+            img2=img[:,:,1][np.ix_(mask.any(1),mask.any(0))]
+            img3=img[:,:,2][np.ix_(mask.any(1),mask.any(0))]
+            img = np.stack([img1,img2,img3],axis=-1)
+        return img
