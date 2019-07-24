@@ -24,7 +24,7 @@ import utils
 class RetinopathyDataset(Dataset):
 
     def __init__(self, df, mode, transform, debug=False, on_memory=False, 
-                 auto_crop=False):
+                 auto_crop=False, add_blur=False):
 
         if debug:
             self.df = df[:100]
@@ -40,6 +40,7 @@ class RetinopathyDataset(Dataset):
         self.transform = transform
         self.on_memory = on_memory
         self.auto_crop = auto_crop
+        self.add_blur = add_blur
         images_data = []
         if on_memory:
             for i, row in tqdm(df.iterrows()):
@@ -73,9 +74,9 @@ class RetinopathyDataset(Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         if self.auto_crop:
             image = utils.crop_image_from_gray(image)
-        sigmaX = 10
-#         image=cv2.addWeighted ( image,4, 
-#                                cv2.GaussianBlur( image , (0,0) , sigmaX) ,-4 ,128)
+        sigmaX = 30
+        if self.add_blur:
+            image=cv2.addWeighted(image, 4, cv2.GaussianBlur(image, (0,0), sigmaX), -4, 128)
         image = self.transform(image=image)
         image = image['image']
         image = image.transpose((2, 0, 1))

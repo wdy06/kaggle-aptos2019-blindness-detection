@@ -164,7 +164,7 @@ def main():
         test_csv = pd.read_csv(utils.TEST_CSV_PATH)
         test_tfms = utils.build_transform(size=IMAGE_SIZE, mode='test')
         test_dataset = RetinopathyDataset(df=test_csv, mode='test', transform=test_tfms,
-                                          auto_crop=True)
+                                          auto_crop=True, add_blur=True)
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=BATCH_SIZE, 
                                                   shuffle=False, pin_memory=True,
                                                   num_workers=num_workers)
