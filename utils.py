@@ -154,10 +154,23 @@ def build_model(model_name, pretrained=True):
         model.fc = nn.Linear(2048, N_CLASS)
     elif model_name == 'efficientnet-b2':
         if pretrained:
-            model = EfficientNet.from_pretrained('efficientnet-b2')
+            model = EfficientNet.from_pretrained(model_name)
         else:
-            model = EfficientNet.from_name('efficientnet-b2')
+            model = EfficientNet.from_name(model_name)
         model._fc = nn.Linear(1408, N_CLASS)
+    elif model_name == 'efficientnet-b3':
+        if pretrained:
+            model = EfficientNet.from_pretrained(model_name)
+        else:
+            model = EfficientNet.from_name(model_name)
+        model._fc = nn.Linear(1536, N_CLASS)
+    elif model_name == 'efficientnet-b4':
+        if pretrained:
+            model = EfficientNet.from_pretrained(model_name)
+        else:
+            model = EfficientNet.from_name(model_name)
+        model._fc = nn.Linear(1792, N_CLASS)
+        
         
     elif model_name == 'se_resnext50_32x4d':
         if pretrained:
