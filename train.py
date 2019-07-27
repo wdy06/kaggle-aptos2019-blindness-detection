@@ -21,6 +21,7 @@ import warnings
 from tqdm import tqdm
 from sklearn.metrics import cohen_kappa_score
 from sklearn.model_selection import StratifiedKFold
+import pickle
 
 from azureml.core import Workspace, Experiment
 from torch.utils.tensorboard import SummaryWriter
@@ -101,20 +102,16 @@ def main():
         device = torch.device("cuda:0")
         config = {
                   'epochs': EPOCHS,
-                  #'n_folds': N_FOLDS,
                   'multi': args.multi,
                   'batch_size': BATCH_SIZE,
                   'image_size': IMAGE_SIZE,
                   'model_name': model_name,
+                  'n_class': utils.N_CLASS,
                   'optimizer_name': optimizer_name,
                   'loss_name': loss_name,
                   'lr': lr, 
                   'device': device,
-                  #'result_dir': result_dir,
-                  #'debug': args.debug,
                   'num_workers': num_workers,
-                  #'azure_run': azure_run,
-                  #'writer': tb_writer
         }
         
         print(config)
@@ -151,11 +148,14 @@ def main():
                 y_pred, y_true = utils.run_model(**config)
             if args.cv:
                 oof_preds[valid_index] = y_pred
-        #oof_preds, y_true = utils.run_model(**config)
         if args.cv:
-            val_kappa = cohen_kappa_score(np.argmax(oof_preds, axis=1), train_df['diagnosis'])
+            valid_preds = oof_preds
+            valid_true = train_df['diagnosis']
         else:
-            val_kappa = cohen_kappa_score(np.argmax(y_pred, axis=1), y_true)
+            valid_preds = y_pred
+            valid_true = y_true
+        val_kappa = cohen_kappa_score(np.argmax(valid_preds, axis=1), valid_true,
+                                      weights='quadratic')
             
         print(f'best val kappa: {val_kappa}')
         if azure_run:

@@ -1,13 +1,16 @@
 import os
+from functools import partial
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageFile
+import scipy as sp
 from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import cohen_kappa_score
 from tqdm import tqdm, tqdm_notebook
 import cv2
-from collections import OrderedDict
+from collections import OrderedDict, Counter
+import json
 
 from torch.utils.data import Dataset
 import torchvision
@@ -38,10 +41,11 @@ TEST_DIR_PATH = os.path.join(DIR_PATH, 'data/test_images')
 SAMPLE_SUBMISSION_PATH = os.path.join(DIR_PATH, 'data/sample_submission.csv')
 RESULT_DIR = os.path.join(DIR_PATH, 'results')
 N_CLASS = 5
+N_CLASS_REG = 1
 
 
 
-def run_model(df, train_index, valid_index, epochs, batch_size, image_size, model_name, 
+def run_model(df, train_index, valid_index, epochs, batch_size, image_size, model_name, n_class,
               optimizer_name, loss_name, lr, multi,
               device, model_path, num_workers, 
               azure_run=None, writer=None):
@@ -61,7 +65,7 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, 
                                              shuffle=False, pin_memory=True, num_workers=num_workers)
 
-    model = build_model(model_name)
+    model = build_model(model_name, n_class)
     if multi:
         model = nn.DataParallel(model)
 
@@ -89,7 +93,7 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
         # validation
         model.eval()
         avg_val_loss = 0.
-        valid_preds_fold = np.zeros((len(val_dataset), N_CLASS))
+        valid_preds_fold = np.zeros((len(val_dataset), n_class))
         for i, (data, target) in enumerate(val_loader):
             data, target = data.to(device), target.to(device)
             with torch.no_grad():
@@ -125,7 +129,7 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
     fold_best_model = load_pytorch_model(model_name, model_path)
     if multi:
         fold_best_model = nn.DataParallel(fold_best_model)
-    best_valid_preds = predict(fold_best_model, val_loader, N_CLASS, device)
+    best_valid_preds = predict(fold_best_model, val_loader, n_class, device)
     
     return best_valid_preds, valid['diagnosis']
         
@@ -145,31 +149,31 @@ def predict(model, dataloader, n_class, device):
     return preds
     
     
-def build_model(model_name, pretrained=True):
+def build_model(model_name, n_class=N_CLASS, pretrained=True):
     if model_name == 'resnet34':
         model = resnet34(pretrained=pretrained)
-        model.fc = nn.Linear(512, N_CLASS)
+        model.fc = nn.Linear(512, n_class)
     elif model_name == 'resnet50':
         model = resnet50(pretrained=pretrained)
-        model.fc = nn.Linear(2048, N_CLASS)
+        model.fc = nn.Linear(2048, n_class)
     elif model_name == 'efficientnet-b2':
         if pretrained:
             model = EfficientNet.from_pretrained(model_name)
         else:
             model = EfficientNet.from_name(model_name)
-        model._fc = nn.Linear(1408, N_CLASS)
+        model._fc = nn.Linear(1408, n_class)
     elif model_name == 'efficientnet-b3':
         if pretrained:
             model = EfficientNet.from_pretrained(model_name)
         else:
             model = EfficientNet.from_name(model_name)
-        model._fc = nn.Linear(1536, N_CLASS)
+        model._fc = nn.Linear(1536, n_class)
     elif model_name == 'efficientnet-b4':
         if pretrained:
             model = EfficientNet.from_pretrained(model_name)
         else:
             model = EfficientNet.from_name(model_name)
-        model._fc = nn.Linear(1792, N_CLASS)
+        model._fc = nn.Linear(1792, n_class)
         
         
     elif model_name == 'se_resnext50_32x4d':
@@ -180,7 +184,7 @@ def build_model(model_name, pretrained=True):
             model = pretrainedmodels.__dict__[model_name](num_classes=1000)
             
         model.avg_pool = nn.AdaptiveAvgPool2d((1,1))
-        model.last_linear = nn.Linear(2048, 5)
+        model.last_linear = nn.Linear(2048, n_class)
     else:
         raise ValueError('unknown model name')
     return model
@@ -195,6 +199,8 @@ def build_optimizer(optimizer_name, *args, **kwargs):
 def build_loss(loss_name):
     if loss_name == 'crossentropy':
         return nn.CrossEntropyLoss()
+    elif loss_name == 'mse':
+        return nn.MSELoss()
     else:
         raise ValueError('unknown loss name')
 
@@ -261,3 +267,50 @@ def crop_image_from_gray(img,tol=7):
             img3=img[:,:,2][np.ix_(mask.any(1),mask.any(0))]
             img = np.stack([img1,img2,img3],axis=-1)
         return img
+    
+    
+class OptimizedRounder(object):
+    def __init__(self):
+        self.coef_ = 0
+
+    def _kappa_loss(self, coef, X, y):
+        X_p = np.copy(X)
+        for i, pred in enumerate(X_p):
+            if pred < coef[0]:
+                X_p[i] = 0
+            elif pred >= coef[0] and pred < coef[1]:
+                X_p[i] = 1
+            elif pred >= coef[1] and pred < coef[2]:
+                X_p[i] = 2
+            elif pred >= coef[2] and pred < coef[3]:
+                X_p[i] = 3
+            else:
+                X_p[i] = 4
+
+        ll = cohen_kappa_score(y, X_p, weights='quadratic')
+        return -ll
+
+    def fit(self, X, y):
+        loss_partial = partial(self._kappa_loss, X=X, y=y)
+        initial_coef = [0.5, 1.5, 2.5, 3.5]
+        self.coef_ = sp.optimize.minimize(loss_partial, initial_coef,
+                                          method='nelder-mead')
+        
+    def predict(self, X, coef):
+        X_p = np.copy(X)
+        for i, pred in enumerate(X_p):
+            if pred < coef[0]:
+                X_p[i] = 0
+            elif pred >= coef[0] and pred < coef[1]:
+                X_p[i] = 1
+            elif pred >= coef[1] and pred < coef[2]:
+                X_p[i] = 2
+            elif pred >= coef[2] and pred < coef[3]:
+                X_p[i] = 3
+            else:
+                X_p[i] = 4
+        return X_p
+
+    def coefficients(self):
+        return self.coef_['x']
+    
