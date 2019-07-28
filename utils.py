@@ -46,7 +46,7 @@ N_CLASS_REG = 1
 
 
 def run_model(df, train_index, valid_index, epochs, batch_size, image_size, model_name, n_class,
-              optimizer_name, loss_name, lr, multi,
+              optimizer_name, loss_name, lr, task, multi,
               device, model_path, num_workers, 
               azure_run=None, writer=None):
     
@@ -81,7 +81,13 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
         avg_loss = 0.
         # train
         for data, target in tqdm(train_loader):
-            data, target = data.to(device), target.to(device)
+            data = data.to(device)
+            if task == 'class':
+                target = target.to(device)
+            elif task == 'reg':
+                target = target.view(-1, 1)
+                target = target.to(device, dtype=torch.float)
+            
             optimizer.zero_grad()
             y_pred = model(data)
             loss = loss_func(y_pred, target)
@@ -95,14 +101,26 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
         avg_val_loss = 0.
         valid_preds_fold = np.zeros((len(val_dataset), n_class))
         for i, (data, target) in enumerate(val_loader):
-            data, target = data.to(device), target.to(device)
+            data = data.to(device)
+            if task == 'class':
+                target = target.to(device)
+            elif task == 'reg':
+                target = target.view(-1, 1)
+                target = target.to(device, dtype=torch.float)
             with torch.no_grad():
                 y_pred = model(data).detach()
 
             avg_val_loss += loss_func(y_pred, target).item()
             valid_preds_fold[i * batch_size:(i + 1) * batch_size] = F.softmax(y_pred, dim=1).cpu().numpy()
         avg_val_loss /= len(val_loader)
-        val_kappa = cohen_kappa_score(np.argmax(valid_preds_fold, axis=1),
+        
+        if task == 'class':
+            round_valid_preds = np.argmax(valid_preds_fold, axis=1)
+        elif task == 'reg':
+            initial_coef = [0.5, 1.5, 2.5, 3.5]
+            optR = OptimizedRounder()
+            round_valid_preds = optR.predict(valid_preds_fold, initial_coef)
+        val_kappa = cohen_kappa_score(round_valid_preds,
                                       val_dataset.df['diagnosis'],
                                       weights='quadratic')
         print(f'epoch {epoch+1} / {epochs}, loss: {avg_loss:.5}, val_loss: {avg_val_loss:.5}, val_kappa: {val_kappa:.5}')
@@ -126,7 +144,7 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
             print(f'update best score !! current best score: {best_val_score:.5} !!')
         save_checkpoint(model, is_best, model_path)
 
-    fold_best_model = load_pytorch_model(model_name, model_path)
+    fold_best_model = load_pytorch_model(model_name, model_path, n_class)
     if multi:
         fold_best_model = nn.DataParallel(fold_best_model)
     best_valid_preds = predict(fold_best_model, val_loader, n_class, device)
@@ -237,7 +255,7 @@ def save_checkpoint(model, is_best, path):
 def save_pytorch_model(model, path):
     torch.save(model.state_dict(), path)
     
-def load_pytorch_model(model_name, path, *args, **kwargs):
+def load_pytorch_model(model_name, path, n_class, *args, **kwargs):
     state_dict = torch.load(path)
     new_state_dict = OrderedDict()
     for k, v in state_dict.items():
@@ -245,7 +263,7 @@ def load_pytorch_model(model_name, path, *args, **kwargs):
         if k[:7] == 'module.':
             name = k[7:] # remove `module.`
         new_state_dict[name] = v
-    model = build_model(model_name, pretrained=False)
+    model = build_model(model_name, n_class, pretrained=False)
     model.load_state_dict(new_state_dict)
     #model.load_state_dict(state_dict)
     return model
