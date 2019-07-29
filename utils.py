@@ -48,7 +48,7 @@ N_CLASS_REG = 1
 
 def run_model(df, train_index, valid_index, epochs, batch_size, image_size, model_name, n_class,
               optimizer_name, loss_name, lr, task, multi,
-              device, model_path, num_workers, 
+              device, model_path, num_workers, lr_scheduler, 
               azure_run=None, writer=None):
     
     train_tfms = build_transform(size=image_size, mode='train')
@@ -71,7 +71,9 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
         model = nn.DataParallel(model)
 
     optimizer = build_optimizer(optimizer_name, model.parameters(), lr)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=lr/100)
+    #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=lr/100)
+    if lr_scheduler:
+        scheduler = build_lr_scheduler(optimizer, lr_scheduler['name'], **lr_scheduler['option'])
     loss_func = build_loss(loss_name)
 
 
@@ -127,7 +129,8 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
         print(f'epoch {epoch+1} / {epochs}, loss: {avg_loss:.5}, val_loss: {avg_val_loss:.5}, val_kappa: {val_kappa:.5}')
 
         # step scheduler
-        scheduler.step()
+        if scheduler:
+            scheduler.step()
 
         if writer:
             writer.add_scalar('loss', avg_loss, epoch)
@@ -137,7 +140,8 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
             azure_run.log('loss', avg_loss)
             azure_run.log('val loss', avg_val_loss)
             azure_run.log('val kappa', val_kappa)
-            azure_run.log('lr', scheduler.get_lr()[0])
+            if scheduler:
+                azure_run.log('lr', scheduler.get_lr()[0])
 
         is_best = bool(avg_val_loss < best_val_score)
         if is_best:
@@ -224,6 +228,15 @@ def build_loss(loss_name):
     else:
         raise ValueError('unknown loss name')
 
+def build_lr_scheduler(optimizer, scheduler_name, *args, **kwargs):
+    
+    if scheduler_name == 'CosineAnnealing':
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, *args, **kwargs)
+    elif scheduler_name == 'StepLR':
+        scheduler = optim.lr_scheduler.StepLR(optimizer, *args, **kwargs)
+    return scheduler
+    
+    
 def build_transform(size, mode):
     border_mode = cv2.BORDER_CONSTANT
     if mode == 'train':

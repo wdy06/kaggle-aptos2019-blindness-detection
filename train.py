@@ -52,8 +52,9 @@ def main():
     model_name = config['model']
     optimizer_name = config['optimizer']
     loss_name = config['loss']
-    lr = config['lr']
+    lr = float(config['lr'])
     n_class = config['n_class']
+    lr_scheduler = config.get('lr_scheduler')
     azure_run = None
     tb_writer = None
     num_workers = 64
@@ -81,7 +82,8 @@ def main():
             azure_run.log('optimizer', optimizer_name)
             azure_run.log('loss_name', loss_name)
             azure_run.log('lr', lr)
-            azure_run.log('task', args.task)
+            azure_run.log('lr_scheduler', lr_scheduler)
+            azure_run.log('task', task)
             if args.cv:
                 azure_run.log('cv', N_FOLDS)
             else:
@@ -110,6 +112,7 @@ def main():
                   'optimizer_name': optimizer_name,
                   'loss_name': loss_name,
                   'lr': lr, 
+                  'lr_scheduler': lr_scheduler,
                   'task': task,
                   'device': device,
                   'num_workers': num_workers,
@@ -136,7 +139,7 @@ def main():
             model_path = result_dir / f'model_fold{i_fold}'
             config['train_index'] = train_index
             config['valid_index'] = valid_index
-            config['model_path'] = model_path
+            config['model_path'] = str(model_path)
             if azure_run:
                 if i_fold == 0:
                     config['azure_run'] = azure_run
