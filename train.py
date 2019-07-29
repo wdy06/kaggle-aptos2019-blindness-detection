@@ -22,6 +22,7 @@ from tqdm import tqdm
 from sklearn.metrics import cohen_kappa_score
 from sklearn.model_selection import StratifiedKFold
 import pickle
+from pathlib import Path
 
 from azureml.core import Workspace, Experiment
 from torch.utils.tensorboard import SummaryWriter
@@ -34,33 +35,25 @@ from dataset import RetinopathyDataset
 parser = argparse.ArgumentParser(description='aptos2019 blindness detection on kaggle')
 parser.add_argument("--debug", help="run debug mode",
                     action="store_true")
-parser.add_argument("--no_cache", help="extract feature without cache",
-                    action="store_true")
 parser.add_argument("--cv", help="do cross validation",
                     action="store_true")
 parser.add_argument("--multi", help="use multi gpu",
                     action="store_true")
-parser.add_argument('--model', '-m', type=str, default='resnet34',
-                    help='cnn model name')
-parser.add_argument('--loss', '-l', type=str, default='crossentropy',
-                    help='loss name')
-parser.add_argument('--batch', '-B', type=int, default=64,
-                    help='batch size')
-parser.add_argument('--size', '-S', type=int, default=256,
-                    help='image size')
-parser.add_argument('--task', '-t', type=str, default='class',
-                    help='task type: class or reg')
+parser.add_argument('--config', '-c', type=str, help='path to config')
 args = parser.parse_args()
 
 def main():
-    EPOCHS = 50
+    config = utils.load_yaml(args.config)
+    task = config['task']
+    EPOCHS = config['epoch']
     N_FOLDS = 5
-    BATCH_SIZE = args.batch
-    IMAGE_SIZE = args.size
-    model_name = args.model
-    optimizer_name = 'adam'
-    loss_name = args.loss
-    lr = 0.001
+    BATCH_SIZE = config['batchsize']
+    IMAGE_SIZE = config['image_size']
+    model_name = config['model']
+    optimizer_name = config['optimizer']
+    loss_name = config['loss']
+    lr = config['lr']
+    n_class = config['n_class']
     azure_run = None
     tb_writer = None
     num_workers = 64
@@ -74,9 +67,9 @@ def main():
             EPOCHS = 1
             N_FOLDS = 2
         if args.debug:
-            result_dir = os.path.join(utils.RESULT_DIR, 'debug-' + experiment_name)
+            result_dir = Path(utils.RESULT_DIR) / ('debug-' + experiment_name)
         else:
-            result_dir = os.path.join(utils.RESULT_DIR, experiment_name)
+            result_dir = Path(utils.RESULT_DIR) / experiment_name
             ws = Workspace.from_config('.aml_config/config.json')
             exp = Experiment(workspace=ws, name='kaggle-aptos2019')
             azure_run = exp.start_logging()
@@ -93,18 +86,13 @@ def main():
                 azure_run.log('cv', N_FOLDS)
             else:
                 azure_run.log('cv', 0)
+                
         if args.multi:
             print('use multi gpu !!')
             
-        assert args.task in ['class', 'reg']
-        if args.task == 'class':
-            n_class = utils.N_CLASS
-        elif args.task == 'reg':
-            n_class = utils.N_CLASS_REG
-            
-
         os.mkdir(result_dir)
         print(f'created: {result_dir}')
+        utils.save_yaml(result_dir / Path(args.config).name, config)
         
         
 #         if not args.debug:
@@ -122,7 +110,7 @@ def main():
                   'optimizer_name': optimizer_name,
                   'loss_name': loss_name,
                   'lr': lr, 
-                  'task': args.task,
+                  'task': task,
                   'device': device,
                   'num_workers': num_workers,
         }
@@ -145,7 +133,7 @@ def main():
         # cross validation
         oof_preds = np.zeros((len(train_df), n_class))
         for i_fold, (train_index, valid_index) in tqdm(enumerate(indices)):
-            model_path = os.path.join(result_dir, f'model_fold{i_fold}')
+            model_path = result_dir / f'model_fold{i_fold}'
             config['train_index'] = train_index
             config['valid_index'] = valid_index
             config['model_path'] = model_path
@@ -167,9 +155,9 @@ def main():
         else:
             valid_preds = y_pred
             valid_true = y_true
-        if args.task == 'class':
+        if task == 'class':
             round_valid_preds = np.argmax(valid_preds, axis=1)
-        elif args.task == 'reg':
+        elif task == 'reg':
             print('optimizing threshold ...')
             optR = utils.OptimizedRounder()
             optR.fit(valid_preds, valid_true)
@@ -195,17 +183,16 @@ def main():
 
         test_preds = np.zeros((len(test_csv), n_class))
         for i in range(len(indices)):
-            model = utils.load_pytorch_model(model_name, os.path.join(result_dir, f'model_fold{i}'), n_class)
+            model = utils.load_pytorch_model(model_name, result_dir / f'model_fold{i}', n_class)
             test_preds += utils.predict(model, test_loader, n_class=n_class, device=device)
         test_preds /= len(indices)
-        if args.task == 'class':
+        if task == 'class':
             round_test_preds = np.argmax(test_preds, axis=1)
-        elif args.task == 'reg':
+        elif task == 'reg':
             round_test_preds = optR.predict(test_preds, coef)
         submission_csv = pd.read_csv(utils.SAMPLE_SUBMISSION_PATH)
         submission_csv['diagnosis'] = round_test_preds
-        submission_csv.to_csv(os.path.join(result_dir, 'submission.csv'),
-                              index=False)
+        submission_csv.to_csv(result_dir / 'submission.csv', index=False)
         
         print('finish!!!')
         if not args.debug:
