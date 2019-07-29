@@ -1,0 +1,15 @@
+task: class
+epoch: 50
+batchsize: 256
+model: efficientnet-b3
+optimizer: adam
+loss: crossentropy
+lr: 1e-3
+image_size: 256
+n_class: 5
+lr_scheduler:
+  name: StepLR
+  option: 
+    step_size: 20
+    gamma: 0.1
+
