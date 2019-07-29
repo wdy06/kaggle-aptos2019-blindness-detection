@@ -162,7 +162,8 @@ def predict(model, dataloader, n_class, device):
         data = data.to(device)
         with torch.no_grad():
             y_pred = model(data).detach()
-        y_pred = F.softmax(y_pred, dim=1).cpu().numpy()
+        #y_pred = F.softmax(y_pred, dim=1).cpu().numpy()
+        y_pred = y_pred.cpu().numpy()
         preds = np.concatenate([preds, y_pred])
     return preds
     

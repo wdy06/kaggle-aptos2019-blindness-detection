@@ -42,10 +42,14 @@ parser.add_argument("--multi", help="use multi gpu",
                     action="store_true")
 parser.add_argument('--model', '-m', type=str, default='resnet34',
                     help='cnn model name')
+parser.add_argument('--loss', '-l', type=str, default='crossentropy',
+                    help='loss name')
 parser.add_argument('--batch', '-B', type=int, default=64,
                     help='batch size')
 parser.add_argument('--size', '-S', type=int, default=256,
                     help='image size')
+parser.add_argument('--task', '-t', type=str, default='class',
+                    help='task type: class or reg')
 args = parser.parse_args()
 
 def main():
@@ -55,7 +59,7 @@ def main():
     IMAGE_SIZE = args.size
     model_name = args.model
     optimizer_name = 'adam'
-    loss_name = 'crossentropy'
+    loss_name = args.loss
     lr = 0.001
     azure_run = None
     tb_writer = None
@@ -84,6 +88,7 @@ def main():
             azure_run.log('optimizer', optimizer_name)
             azure_run.log('loss_name', loss_name)
             azure_run.log('lr', lr)
+            azure_run.log('task', args.task)
             if args.cv:
                 azure_run.log('cv', N_FOLDS)
             else:
@@ -91,9 +96,16 @@ def main():
         if args.multi:
             print('use multi gpu !!')
             
+        assert args.task in ['class', 'reg']
+        if args.task == 'class':
+            n_class = utils.N_CLASS
+        elif args.task == 'reg':
+            n_class = utils.N_CLASS_REG
+            
 
         os.mkdir(result_dir)
         print(f'created: {result_dir}')
+        
         
 #         if not args.debug:
 #             tb_writer = SummaryWriter(log_dir=result_dir)
@@ -106,10 +118,11 @@ def main():
                   'batch_size': BATCH_SIZE,
                   'image_size': IMAGE_SIZE,
                   'model_name': model_name,
-                  'n_class': utils.N_CLASS,
+                  'n_class': n_class,
                   'optimizer_name': optimizer_name,
                   'loss_name': loss_name,
                   'lr': lr, 
+                  'task': args.task,
                   'device': device,
                   'num_workers': num_workers,
         }
@@ -130,7 +143,7 @@ def main():
             indices = [indices[0]]
             
         # cross validation
-        oof_preds = np.zeros((len(train_df), utils.N_CLASS))
+        oof_preds = np.zeros((len(train_df), n_class))
         for i_fold, (train_index, valid_index) in tqdm(enumerate(indices)):
             model_path = os.path.join(result_dir, f'model_fold{i_fold}')
             config['train_index'] = train_index
@@ -154,7 +167,18 @@ def main():
         else:
             valid_preds = y_pred
             valid_true = y_true
-        val_kappa = cohen_kappa_score(np.argmax(valid_preds, axis=1), valid_true,
+        if args.task == 'class':
+            round_valid_preds = np.argmax(valid_preds, axis=1)
+        elif args.task == 'reg':
+            print('optimizing threshold ...')
+            optR = utils.OptimizedRounder()
+            optR.fit(valid_preds, valid_true)
+            coef = optR.coefficients()
+            print(f'best coef: {coef}')
+            if azure_run:
+                azure_run.log('coef', coef)
+            round_valid_preds = optR.predict(valid_preds, coef)
+        val_kappa = cohen_kappa_score(round_valid_preds, valid_true,
                                       weights='quadratic')
             
         print(f'best val kappa: {val_kappa}')
@@ -169,13 +193,17 @@ def main():
                                                   shuffle=False, pin_memory=True,
                                                   num_workers=num_workers)
 
-        test_preds = np.zeros((len(test_csv), utils.N_CLASS))
+        test_preds = np.zeros((len(test_csv), n_class))
         for i in range(len(indices)):
-            model = utils.load_pytorch_model(model_name, os.path.join(result_dir, f'model_fold{i}'))
-            test_preds += utils.predict(model, test_loader, n_class=5, device=device)
-            
+            model = utils.load_pytorch_model(model_name, os.path.join(result_dir, f'model_fold{i}'), n_class)
+            test_preds += utils.predict(model, test_loader, n_class=n_class, device=device)
+        test_preds /= len(indices)
+        if args.task == 'class':
+            round_test_preds = np.argmax(test_preds, axis=1)
+        elif args.task == 'reg':
+            round_test_preds = optR.predict(test_preds, coef)
         submission_csv = pd.read_csv(utils.SAMPLE_SUBMISSION_PATH)
-        submission_csv['diagnosis'] = np.argmax(test_preds, axis=1)
+        submission_csv['diagnosis'] = round_test_preds
         submission_csv.to_csv(os.path.join(result_dir, 'submission.csv'),
                               index=False)
         
