@@ -5,3 +5,4 @@ results/
 .amlignore
 .ipynb_checkpoints/
 data/
+outputs/
