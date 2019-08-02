@@ -11,5 +11,5 @@ lr_scheduler:
   name: CosineAnnealing
   option: 
     T_max: 10
-    eta_min: 1e-5
+    eta_min: 0.00001
 
