@@ -52,7 +52,7 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
               azure_run=None, writer=None):
     
     train_tfms = build_transform(size=image_size, mode='train')
-    val_tfms = build_transform(size=image_size, mode='test')
+    val_tfms = build_transform(size=image_size, mode='val')
     
     train = df.iloc[train_index]
     valid = df.iloc[valid_index]
@@ -158,19 +158,28 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
         
     
     
+def predict(model, dataloader, n_class, device, tta=1):
+    def _predict():
+        model.eval()
+        model.to(device)
+        preds = np.zeros([0, n_class])
+        for data, _ in dataloader:
+            data = data.to(device)
+            with torch.no_grad():
+                y_pred = model(data).detach()
+            #y_pred = F.softmax(y_pred, dim=1).cpu().numpy()
+            y_pred = y_pred.cpu().numpy()
+            preds = np.concatenate([preds, y_pred])
+        return preds
     
-def predict(model, dataloader, n_class, device):
-    model.eval()
-    model.to(device)
-    preds = np.zeros([0, n_class])
-    for data, _ in dataloader:
-        data = data.to(device)
-        with torch.no_grad():
-            y_pred = model(data).detach()
-        #y_pred = F.softmax(y_pred, dim=1).cpu().numpy()
-        y_pred = y_pred.cpu().numpy()
-        preds = np.concatenate([preds, y_pred])
+    if tta > 1:
+        print('use tta ...')
+    preds = 0
+    for i in tqdm(range(tta)):
+        preds += _predict()
+    preds /= tta
     return preds
+    
     
     
 def build_model(model_name, n_class=N_CLASS, pretrained=True):
@@ -251,9 +260,16 @@ def build_transform(size, mode):
             albumentations.RandomGamma(),
             albumentations.Normalize(),
         ])
+    elif mode == 'val':
+        transform = albumentations.Compose([
+            albumentations.Resize(size, size),
+            albumentations.Normalize(),
+        ])
     elif mode == 'test':
         transform = albumentations.Compose([
             albumentations.Resize(size, size),
+            albumentations.Flip(),
+            albumentations.RandomBrightness(limit=0.5),
             albumentations.Normalize(),
         ])
     return transform

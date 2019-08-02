@@ -146,7 +146,7 @@ def main():
                     y_pred, y_true = utils.run_model(**config)
                 else:
                     with azure_run.child_run() as child:
-                        conifg['azure_run'] = child
+                        config['azure_run'] = child
                         y_pred, y_true = utils.run_model(**config)
             else:
                 y_pred, y_true = utils.run_model(**config)
@@ -177,7 +177,8 @@ def main():
             azure_run.log('best val kappa', val_kappa)
 
         test_csv = pd.read_csv(utils.TEST_CSV_PATH)
-        test_tfms = utils.build_transform(size=IMAGE_SIZE, mode='test')
+        #test_tfms = utils.build_transform(size=IMAGE_SIZE, mode='test')
+        test_tfms = utils.build_transform(size=IMAGE_SIZE, mode='val')
         test_dataset = RetinopathyDataset(df=test_csv, mode='test', transform=test_tfms,
                                           auto_crop=True, add_blur=True)
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=BATCH_SIZE, 
@@ -187,7 +188,7 @@ def main():
         test_preds = np.zeros((len(test_csv), n_class))
         for i in range(len(indices)):
             model = utils.load_pytorch_model(model_name, result_dir / f'model_fold{i}', n_class)
-            test_preds += utils.predict(model, test_loader, n_class=n_class, device=device)
+            test_preds += utils.predict(model, test_loader, n_class=n_class, device=device, tta=1)
         test_preds /= len(indices)
         if task == 'class':
             round_test_preds = np.argmax(test_preds, axis=1)
