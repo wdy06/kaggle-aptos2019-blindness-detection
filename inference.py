@@ -25,6 +25,7 @@ import pickle
 
 from azureml.core import Workspace, Experiment
 from torch.utils.tensorboard import SummaryWriter
+import torch.nn as nn
 
 
 import utils
@@ -47,6 +48,8 @@ parser.add_argument('--weight', '-w', type=str,
                     help='path to model weight')
 parser.add_argument('--task', '-t', type=str, default='class',
                     help='task type: class or reg')
+parser.add_argument('--tta', type=int, default=None,
+                    help='number of tta')
 args = parser.parse_args()
 
 def main():
@@ -85,7 +88,15 @@ def main():
 
     # cross validation
     oof_preds = np.zeros((len(train_df), utils.N_CLASS))
-    val_tfms = utils.build_transform(size=image_size, mode='test')
+    print(f'tta: {args.tta}')
+    if args.tta:
+        tfms_mode = 'test'
+        num_tta = args.tta
+    else:
+        tfms_mode = 'val'
+        num_tta = 1
+        
+    val_tfms = utils.build_transform(size=image_size, mode=tfms_mode)
     for i_fold, (train_index, valid_index) in tqdm(enumerate(indices)):
         valid = train_df.iloc[valid_index]
         val_dataset = RetinopathyDataset(df=valid, mode='train', 
@@ -96,7 +107,7 @@ def main():
         model = utils.load_pytorch_model(model_name, model_path, n_class)
         if args.multi:
             model = nn.DataParallel(model)
-        y_pred = utils.predict(model, val_loader, n_class, device)
+        y_pred = utils.predict(model, val_loader, n_class, device, tta=num_tta)
         if args.cv:
             oof_preds[valid_index] = y_pred
     if args.cv:
