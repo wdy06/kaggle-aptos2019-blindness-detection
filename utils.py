@@ -28,6 +28,7 @@ import pretrainedmodels
 from efficientnet_pytorch import EfficientNet
 
 from dataset import RetinopathyDataset
+from losses import FocalLoss
 
 
 DIR_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -234,6 +235,8 @@ def build_loss(loss_name):
         return nn.CrossEntropyLoss()
     elif loss_name == 'mse':
         return nn.MSELoss()
+    elif loss_name == 'focal':
+        return FocalLoss()
     else:
         raise ValueError('unknown loss name')
 
@@ -260,6 +263,15 @@ def build_transform(size, mode):
             albumentations.RandomGamma(),
             albumentations.Normalize(),
         ])
+#         transform = albumentations.Compose([
+#             albumentations.Resize(size, size),
+#             albumentations.Flip(),
+#             albumentations.Rotate(),
+#             albumentations.ShiftScaleRotate(shift_limit=0, rotate_limit=0, scale_limit=0.20),
+#             albumentations.RandomBrightness(limit=0.2),
+#             albumentations.RandomContrast(limit=0.2),
+#             albumentations.Normalize(),
+#         ])
     elif mode == 'val':
         transform = albumentations.Compose([
             albumentations.Resize(size, size),
