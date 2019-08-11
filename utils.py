@@ -251,6 +251,8 @@ def build_lr_scheduler(optimizer, scheduler_name, *args, **kwargs):
     
 def build_transform(size, mode):
     border_mode = cv2.BORDER_CONSTANT
+    norm_mean = (0.68865128, 0.63029681, 0.59308879)
+    norm_std = (0.16007041, 0.13788241, 0.10374681)
     if mode == 'train':
         transform = albumentations.Compose([
             albumentations.Resize(size, size),
@@ -262,6 +264,7 @@ def build_transform(size, mode):
             albumentations.RandomContrast(limit=0.3),
             albumentations.RandomGamma(),
             albumentations.Normalize(),
+            #albumentations.Normalize(mean=norm_mean, std=norm_std)
         ])
 #         transform = albumentations.Compose([
 #             albumentations.Resize(size, size),
@@ -276,13 +279,16 @@ def build_transform(size, mode):
         transform = albumentations.Compose([
             albumentations.Resize(size, size),
             albumentations.Normalize(),
+            #albumentations.Normalize(mean=norm_mean, std=norm_std),
         ])
     elif mode == 'test':
         transform = albumentations.Compose([
             albumentations.Resize(size, size),
             albumentations.Flip(),
-            albumentations.RandomBrightness(limit=0.5),
+            albumentations.Rotate(border_mode=border_mode),
+            albumentations.RandomBrightness(limit=0.2),
             albumentations.Normalize(),
+            #albumentations.Normalize(mean=norm_mean, std=norm_std),
         ])
     return transform
 
