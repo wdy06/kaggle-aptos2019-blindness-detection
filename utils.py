@@ -28,7 +28,8 @@ import pretrainedmodels
 from efficientnet_pytorch import EfficientNet
 
 from dataset import RetinopathyDataset
-from losses import FocalLoss
+from losses import FocalLoss, LabelSmoothingLoss
+from radam import RAdam
 
 
 DIR_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -48,7 +49,7 @@ N_CLASS_REG = 1
 
 
 def run_model(df, train_index, valid_index, epochs, batch_size, image_size, model_name, n_class,
-              optimizer_name, loss_name, lr, task, multi,
+              optimizer_name, loss, lr, task, multi,
               device, model_path, num_workers, lr_scheduler, 
               azure_run=None, writer=None):
     
@@ -75,7 +76,8 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
     #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=lr/100)
     if lr_scheduler:
         scheduler = build_lr_scheduler(optimizer, lr_scheduler['name'], **lr_scheduler['option'])
-    loss_func = build_loss(loss_name)
+    print(loss)
+    loss_func = build_loss(loss['name'], **loss.get('option'))
 
 
     model.to(device)
@@ -226,17 +228,21 @@ def build_model(model_name, n_class=N_CLASS, pretrained=True):
 def build_optimizer(optimizer_name, *args, **kwargs):
     if optimizer_name == 'adam':
         optimizer = optim.Adam(*args, **kwargs)
+    elif optimizer_name == 'radam':
+        optimizer = RAdam(*args, **kwargs)
     else:
         raise ValueError('unknown optimizer name')
     return optimizer
 
-def build_loss(loss_name):
+def build_loss(loss_name, *args, **kwargs):
     if loss_name == 'crossentropy':
         return nn.CrossEntropyLoss()
     elif loss_name == 'mse':
         return nn.MSELoss()
     elif loss_name == 'focal':
         return FocalLoss()
+    elif loss_name == 'smoothlabel':
+        return LabelSmoothingLoss(classes=N_CLASS, smoothing=0.1)
     else:
         raise ValueError('unknown loss name')
 

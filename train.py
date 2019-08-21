@@ -51,7 +51,7 @@ def main():
     IMAGE_SIZE = config['image_size']
     model_name = config['model']
     optimizer_name = config['optimizer']
-    loss_name = config['loss']
+    loss = config['loss']
     lr = float(config['lr'])
     n_class = config['n_class']
     lr_scheduler = config.get('lr_scheduler')
@@ -80,7 +80,7 @@ def main():
             azure_run.log('image size', IMAGE_SIZE)
             azure_run.log('model', model_name)
             azure_run.log('optimizer', optimizer_name)
-            azure_run.log('loss_name', loss_name)
+            azure_run.log('loss_name', loss['name'])
             azure_run.log('lr', lr)
             azure_run.log('lr_scheduler', lr_scheduler)
             azure_run.log('task', task)
@@ -110,7 +110,7 @@ def main():
                   'model_name': model_name,
                   'n_class': n_class,
                   'optimizer_name': optimizer_name,
-                  'loss_name': loss_name,
+                  'loss': loss,
                   'lr': lr, 
                   'lr_scheduler': lr_scheduler,
                   'task': task,
