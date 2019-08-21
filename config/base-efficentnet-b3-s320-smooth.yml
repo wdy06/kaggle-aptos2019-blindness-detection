@@ -1,0 +1,19 @@
+task: class
+epoch: 50
+batchsize: 256
+model: efficientnet-b3
+optimizer: adam
+loss:
+  name: smoothlabel
+  option:
+    classes: 5
+    smoothing: 0.1
+lr: 1e-3
+image_size: 320
+n_class: 5
+lr_scheduler:
+  name: CosineAnnealing
+  option: 
+    T_max: 10
+    eta_min: 0.00001
+
