@@ -242,7 +242,7 @@ def build_loss(loss_name, *args, **kwargs):
     elif loss_name == 'focal':
         return FocalLoss()
     elif loss_name == 'smoothlabel':
-        return LabelSmoothingLoss(classes=N_CLASS, smoothing=0.1)
+        return LabelSmoothingLoss(*args, **kwargs)
     else:
         raise ValueError('unknown loss name')
 
