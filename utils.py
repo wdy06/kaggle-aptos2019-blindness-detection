@@ -76,13 +76,20 @@ def run_model(df, train_index, valid_index, epochs, batch_size, image_size, mode
     #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=lr/100)
     if lr_scheduler:
         scheduler = build_lr_scheduler(optimizer, lr_scheduler['name'], **lr_scheduler['option'])
-    print(loss)
-    loss_func = build_loss(loss['name'], **loss.get('option'))
-
+    loss_option = loss.get('option')
+    if loss_option:
+        loss_func = build_loss(loss['name'], **loss_option)
+    else:
+        loss_func = build_loss(loss['name'])
+        
 
     model.to(device)
+    
+    freeze(model)
     best_val_score = 1000000
     for epoch in tqdm(range(epochs)):
+        if epoch == 2:
+            unfreeze(model)
         model.train()
         avg_loss = 0.
         # train
@@ -388,6 +395,24 @@ class OptimizedRounder(object):
         return self.coef_['x']
 
     
+def freeze(model, except_last=True):
+    print('freezing model...')
+    if model.__class__.__name__ == 'DataParallel':
+        f_model = model.module
+    else:
+        f_model = model
+    for param in f_model.parameters():
+        param.requires_grad = False
+    if except_last:
+        last_layer = list(f_model.children())[-1]
+        print(f'except last layer: {last_layer}')
+        for param in last_layer.parameters():
+            param.requires_grad = True
+            
+def unfreeze(model):
+    print('unfreezing model...')
+    for param in model.parameters():
+        param.requires_grad = True
     
     
 def load_yaml(path):
